@@ -1,0 +1,45 @@
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.backup
+.env.production
+
+# PHP tools/cache
+.phpactor.json
+.phpunit.result.cache
+/.phpunit.cache
+/auth.json
+
+# IDE/editor folders
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Node & frontend build
+/node_modules
+/public/build
+/public/hot
+
+# Storage files
+/public/storage
+/storage/*.key
+/storage/pail
+
+# Composer
+/vendor
+
+# Homestead
+Homestead.json
+Homestead.yaml
+
+# Ignore your specific helper files
+/app/helper/FileUploadHelper.php
+/app/helper/ImageEditHelper.php

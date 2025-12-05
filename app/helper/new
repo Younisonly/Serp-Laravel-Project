@@ -1,0 +1,87 @@
+<?php
+
+namespace App\Helpers;
+
+use Illuminate\Http\Request;
+use App\Models\Image;
+use App\Models\VerificationFile;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Support\Str;
+
+class FileUploadHelper
+{
+    /**
+     * Upload file(s) and return ONLY the absolute path
+     * (no host, no protocol, no escaping).
+     *
+     * @param Request $request
+     * @param string|array $filesInput   form field name(s)
+     * @param string $type               'shop','product','user','verification'
+     * @param int|null $ownerId
+     * @param string|null $tableName
+     * @param bool $isPrimary
+     * @return string|null               "/storage/users/xxxxxxxx.jpg"
+     */
+    public static function upload(
+        Request $request,
+        $filesInput,
+        $type,
+        $ownerId = null,
+        $tableName = null,
+        $isPrimary = false
+    ): ?string {
+        $folderMap = [
+            'shop'         => 'shops/media',
+            'verification' => 'shops/verification',
+            'user'         => 'users',
+            'product'      => 'products',
+        ];
+        $folder = $folderMap[$type] ?? 'others';
+
+        $url = null;
+        foreach ((array) $filesInput as $inputName) {
+            if (!$request->hasFile($inputName)) {
+                continue;
+            }
+
+            $fileInputs = $request->file($inputName);
+            $fileInputs = is_array($fileInputs) ? $fileInputs : [$fileInputs];
+
+            /** @var FilesystemAdapter $disk */
+            $disk = Storage::disk('public');
+
+            foreach ($fileInputs as $file) {
+                // 1. unique name
+                $name = Str::random(40) . '.' . $file->getClientOriginalExtension();
+
+                // 2. store inside the disk root  (storage/app/public/...)
+                $disk->putFileAs($folder, $file, $name);
+
+                // 3. absolute path only  ->  "/storage/users/xxxxxxxx.jpg"
+                $url = '/storage/' . $folder . '/' . $name;
+
+                // 4. save metadata
+                if ($type === 'verification') {
+                    VerificationFile::create([
+                        'shop_id' => $ownerId,
+                        'url'     => $url,
+                        'type'    => $file->getClientOriginalExtension(),
+                        'status'  => 'pending',
+                    ]);
+                }
+                else{
+                Image::create([
+                    'table'      => $tableName ?? $type,
+                    'owner_id'   => $ownerId,
+                    'url'        => $url,
+                    'is_primary' => $isPrimary,
+                    'status'     => 'active',
+                ]);
+            }
+            }
+        }
+
+        return $type === 'product' ? null : $url;
+    }
+}
