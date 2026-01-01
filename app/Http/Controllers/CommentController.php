@@ -89,7 +89,8 @@ class CommentController extends Controller
     } catch (\Throwable $e) {
         return response()->json([
             'status' => 'error',
-            'message' => 'Something went wrong while storing comments. '.  Auth::id(),
+            'message' => 'Something went wrong while storing comments. ',
+            "id"=>  Auth::id(),
             'error_message' => $e->getMessage(),
         ], 500);
     }
