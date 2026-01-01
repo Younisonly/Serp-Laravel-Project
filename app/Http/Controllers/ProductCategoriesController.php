@@ -21,4 +21,5 @@ class ProductCategoriesController extends Controller
             ], 500);
         }
     }
+    //;
 }
