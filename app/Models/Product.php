@@ -75,7 +75,7 @@ public function images()
 
 
     
-    public function city() { return $this->belongsTo(Cities::class, 'city_id'); }
+    public function city() { return $this->belongsTo(cities::class, 'city_id'); }
 
     public function favorites()
     {

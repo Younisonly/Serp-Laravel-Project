@@ -10,7 +10,7 @@ use App\Http\Controllers\CountriesController;
 use App\Http\Controllers\ShopsController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\nearbyShopController;
+use App\Http\Controllers\NearbyShopController;
 use App\Http\Controllers\notificationController;
 use App\Http\Controllers\ProductCategoriesController;
 use App\Http\Controllers\ProductsController;
