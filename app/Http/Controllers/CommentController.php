@@ -90,7 +90,7 @@ class CommentController extends Controller
         return response()->json([
             'status' => 'error',
             'message' => 'Something went wrong while storing comments. ',
-            "id"=>  Auth::id(),
+            "id"=>  auth('sanctum')->id(),
             'error_message' => $e->getMessage(),
         ], 500);
     }
