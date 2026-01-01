@@ -47,6 +47,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/flutter-user/{id}', [UserController::class, 'flutterUserInfo']);
     Route::post('/updateUserInfo', [updateUserInfo::class, 'update'])->middleware('throttle:60,1');;
     Route::get('/shopByUserId/{id}', [ShopsController::class, 'getShopByUserId']);
+    Route::post('/comments', [CommentController::class, 'store']);
+
 });
 
 Route::get('/comments', [CommentController::class,  'index']);
@@ -57,7 +59,6 @@ Route::get('Products-filtering', [ProductsFillterController::class, 'Productfilt
 
 Route::get('search-shops', [SearchController::class, 'search']);
 
-Route::post('/comments', [CommentController::class, 'store']);
 
 
 Route::middleware('auth:sanctum')->group(function () {
