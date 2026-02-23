@@ -171,7 +171,7 @@ class AuthController extends Controller
         ], 200);
     }
 
- 
+       
     protected function redirectTo($request)
     {
         if (! $request->expectsJson()) {
