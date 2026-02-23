@@ -83,7 +83,8 @@ class AuthController extends Controller
 }
    
     public function login(Request $request)
-    {try{
+    {
+        try{
         $request->validate([
             'email' => 'required|email',
             'password' => 'required',
@@ -123,7 +124,8 @@ class AuthController extends Controller
             'token' => $token,
         ]);
     }
-    catch (\Throwable $e) {
+    catch (\Throwable $e)
+     {
        
         // Return clear error message to API consumer
         return response()->json([
@@ -161,7 +163,14 @@ class AuthController extends Controller
     }
     
     
-   
+    public function me(Request $request)
+    {
+        return response()->json([
+            'status' => 'success',
+            'user' => $request->user() // Sanctum returns the authenticated user
+        ], 200);
+    }
+
 
     protected function redirectTo($request)
     {

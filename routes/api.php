@@ -39,6 +39,8 @@ Route::get('/shop/{id}', [ShopsController::class, 'getShopById']);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/me', [AuthController::class, 'me']);
+
 
 });
 
