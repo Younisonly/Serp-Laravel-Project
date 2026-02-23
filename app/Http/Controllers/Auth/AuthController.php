@@ -163,13 +163,32 @@ class AuthController extends Controller
     }
        
     
-    public function me(Request $request)
-    {
+  // ✅ FIXED: Return explicit user data
+public function me(Request $request)
+{
+    $user = $request->user();
+    
+    if (!$user) {
         return response()->json([
-            'status' => 'success',
-            'user' => $request->user() // Sanctum returns the authenticated user
-        ], 200);
+            'status' => 'error',
+            'message' => 'Unauthenticated'
+        ], 401);
     }
+
+    return response()->json([
+        'status' => 'success',
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'image' => $user->image,
+            'status' => $user->status,
+            'type' => $user->type,
+            'created_at' => $user->created_at,
+        ]
+    ], 200);
+}
 
        ////////////////
     protected function redirectTo($request)
