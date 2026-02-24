@@ -21,79 +21,72 @@ use App\Http\Controllers\shopRegisteration;
 use App\Http\Controllers\updateUserInfo;
 use App\Models\cities;
 
+// ================= PUBLIC ROUTES =================
 Route::apiResource('users', UserController::class);
 Route::apiResource('shops', ShopsController::class);
 
-////////////////////main map nearby ////////////////////////////////
+// Main map nearby
 Route::get('/nearby', [NearbyShopController::class, 'nearbyShops']);
 
-
-
-////////////////////products of a shop///////////////////////////
+// Products of a shop
 Route::get('/shopsProduct', [ProductsController::class, 'productsOfShop']);
 Route::get('/product/{id}', [ProductsController::class, 'getProductById']);
 Route::get('/shop/{id}', [ShopsController::class, 'getShopById']);
 
-
-///////////////////// Auth api///////////////////////////////////
+// ================= AUTH API =================
+// Public auth routes (no token required)
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    // ❌ /me is NOT here - it needs Sanctum protection
 });
 
+// ================= PROTECTED ROUTES (auth:sanctum) =================
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'me']);
+    
+    // ✅ Auth endpoints that need protection (FULL PATHS):
+    Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    
+    // User routes
     Route::get('/flutter-user/{id}', [UserController::class, 'flutterUserInfo']);
-    Route::post('/updateUserInfo', [updateUserInfo::class, 'update'])->middleware('throttle:60,1');;
+    Route::post('/updateUserInfo', [updateUserInfo::class, 'update'])->middleware('throttle:60,1');
+    
+    // Shop routes
     Route::get('/shopByUserId/{id}', [ShopsController::class, 'getShopByUserId']);
+    
+    // Comment routes
     Route::post('/comments', [CommentController::class, 'store']);
-});
-
-Route::get('/comments', [CommentController::class,  'index']);
-
-Route::get('/product-categories', [ProductCategoriesController::class, 'index']);
-Route::get('Products-filtering', [ProductsFillterController::class, 'Productfilter']);
-
-
-Route::get('search-shops', [SearchController::class, 'search']);
-
-
-
-Route::middleware('auth:sanctum')->group(function () {
-
-
     Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
-
+    
+    // Reaction & Report routes
     Route::post('/comment-reactions', [CommentReactionController::class, 'store']);
     Route::post('/reports', [ReportController::class, 'store']);
+    
+    // Notification routes
+    Route::post('send-notification', [notificationController::class, 'store']);
+    
+    // Favorite routes
+    Route::get('favorites', [FavoriteController::class, 'index']);
+    Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
+    
+    // Shop registration
+    Route::post('/RegisterShop', [shopRegisteration::class, 'store']);
 });
 
+// ================= MORE PUBLIC ROUTES =================
+Route::get('/comments', [CommentController::class, 'index']);
+Route::get('/product-categories', [ProductCategoriesController::class, 'index']);
+Route::get('Products-filtering', [ProductsFillterController::class, 'Productfilter']);
+Route::get('search-shops', [SearchController::class, 'search']);
 
-/////////////////// cities && countries
-
+// ================= CITIES & COUNTRIES =================
 Route::get('/countries', [CountriesController::class, 'index']);
 Route::get('/countries-with-cities', [CountriesController::class, 'withCities']);
 Route::get('/cities', [CitiesController::class, 'index']);
 Route::get('/countries/{countryId}/cities', [CitiesController::class, 'byCountry']);
 
-
-/////////////////////notification ///////////////////////
-Route::post('send-notification', [notificationController::class, 'store'])->middleware('auth:sanctum');
-
-
-
-
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('favorites', [FavoriteController::class, 'index']);
-    Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
-    Route::post('/RegisterShop', [shopRegisteration::class, 'store']);
-});
-
-
-
-
-
+// ================= SHOP CATEGORIES =================
 Route::get('/shop-categories', [ShopCategoryController::class, 'index']);
 Route::get('/shop-categories/{id}', [ShopCategoryController::class, 'show']);
 Route::post('/shop-categories', [ShopCategoryController::class, 'store']);
