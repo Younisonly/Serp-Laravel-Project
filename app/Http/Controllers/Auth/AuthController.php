@@ -12,6 +12,26 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
+    // ✅ HELPER: Always return ALL possible user fields (even if null)
+    private function formatUserResponse(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone ?? '',
+            'country' => $user->country ?? '',      // ✅ Always included
+            'city' => $user->city ?? '',            // ✅ Always included
+            'gender' => $user->gender ?? '',        // ✅ Always included
+            'birth_date' => $user->birth_date ?? '', // ✅ Always included
+            'image' => $user->image ?? '',
+            'status' => $user->status ?? 'active',
+            'type' => $user->type ?? 'user',
+            'created_at' => $user->created_at,
+            'updated_at' => $user->updated_at,
+        ];
+    }
+
     /**
      * Register a new user
      */
@@ -39,27 +59,25 @@ class AuthController extends Controller
                 'password' => HashHelper::make($request->password),
                 'phone' => $request->phone,
                 'status' => 'active',
-                'type' => "user"
+                'type' => "user",
+                // ✅ Extra fields default to null (will be filled later via update)
+                'country' => null,
+                'city' => null,
+                'gender' => null,
+                'birth_date' => null,
             ]);
 
             $imageUrl = FileUploadHelper::upload($request, 'image', 'user', $user->id, 'users');
-
-            $user->update(['image' => $imageUrl]);
+            if ($imageUrl) {
+                $user->update(['image' => $imageUrl]);
+            }
             
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'تم التسجيل بنجاح',
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'image' => $imageUrl ?? null,
-                    'status' => $user->status,
-                    'type' => $user->type
-                ],
+                'user' => $this->formatUserResponse($user), // ✅ Full structure
                 'token' => $token,
             ], 201);
             
@@ -107,15 +125,7 @@ class AuthController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'تم تسجيل الدخول',
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'image' => $user->image,
-                    'status' => $user->status,
-                    'type' => $user->type
-                ],
+                'user' => $this->formatUserResponse($user), // ✅ Full structure
                 'token' => $token,
             ]);
         } catch (\Throwable $e) {
@@ -153,7 +163,7 @@ class AuthController extends Controller
     }
     
     /**
-     * Get current authenticated user - FIXED: explicit fields
+     * Get current authenticated user
      */
     public function me(Request $request)
     {
@@ -168,16 +178,7 @@ class AuthController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'image' => $user->image,
-                'status' => $user->status,
-                'type' => $user->type,
-                'created_at' => $user->created_at,
-            ]
+            'user' => $this->formatUserResponse($user), // ✅ Full structure
         ], 200);
     }
 
