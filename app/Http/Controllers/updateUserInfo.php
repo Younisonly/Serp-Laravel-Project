@@ -7,6 +7,7 @@ use App\Helpers\HashHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Carbon;
 use App\Models\User;
 use App\Rules\ImageAll;
@@ -37,15 +38,13 @@ class updateUserInfo extends Controller
                 $hasOld = $r->filled('old_password');
                 $hasNew = $r->filled('password');
 
-                if (!$hasOld && !$hasNew) {           // nothing sent – skip
-                    return;
-                }
-                if ($hasOld && !$hasNew) {            // only old
+                if (!$hasOld && !$hasNew) { return; }
+                if ($hasOld && !$hasNew) {
                     $v->errors()->add('password', 'Please supply a new password.');
                     return;
                 }
-                if (!$hasOld && $hasNew) {            // only new
-                    $v->errors()->add('old_password', 'Please supply the current password.  ');
+                if (!$hasOld && $hasNew) {
+                    $v->errors()->add('old_password', 'Please supply the current password.');
                     return;
                 }
                 if (!Hash::check($r->old_password, auth()->guard('sanctum')->user()->password)) {
@@ -63,9 +62,10 @@ class updateUserInfo extends Controller
 
             /* ----------  update user  ---------- */
             DB::beginTransaction();
-                        /** @var User $user */
-
             $user = auth()->guard('sanctum')->user();
+            
+            // ✅ Save current image as fallback
+            $currentImage = $user->image;
 
             $user->name       = $r->name;
             $user->phone      = $r->phone;
@@ -74,29 +74,61 @@ class updateUserInfo extends Controller
             $user->gender     = $r->gender;
             $user->birth_date = Carbon::parse($r->birth_date)->format('Y-m-d');
 
-            if ($r->filled('password')) {                 // old already verified
+            if ($r->filled('password')) {
                 $user->password = HashHelper::make($r->password);
             }
 
+            // ✅ FIXED: Handle image upload with logging & fallback
             if ($r->hasFile('image')) {
-                $user->image = FileUploadHelper::upload($r, 'image', 'user', $user->id, 'users');
+                Log::info('Image upload attempt', [
+                    'user_id' => $user->id,
+                    'file_name' => $r->file('image')->getClientOriginalName(),
+                    'file_size' => $r->file('image')->getSize(),
+                ]);
+
+                $uploadedUrl = FileUploadHelper::upload($r, 'image', 'user', $user->id, 'users');
+                
+                if ($uploadedUrl) {
+                    $user->image = $uploadedUrl;
+                    Log::info('Image upload success', ['url' => $uploadedUrl]);
+                } else {
+                    // ✅ Keep old image if upload fails
+                    $user->image = $currentImage;
+                    Log::warning('Image upload returned null - keeping existing image', [
+                        'user_id' => $user->id
+                    ]);
+                }
             }
 
             $user->save();
             DB::commit();
 
-            /* ----------  exact shape Flutter prints  ---------- */
+            // ✅ Return explicit user data (guarantee image field)
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Profile updated',
-                'user'    => $user->only([
-                    'id', 'name', 'email', 'phone', 'country', 'city',
-                    'gender', 'birth_date', 'image', 'type'
-                ]),
+                'user'    => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'country' => $user->country,
+                    'city' => $user->city,
+                    'gender' => $user->gender,
+                    'birth_date' => $user->birth_date,
+                    'image' => $user->image,  // ✅ Explicitly include
+                    'type' => $user->type,
+                ],
             ], 200);
 
         } catch (\Throwable $e) {
             DB::rollBack();
+            Log::error('updateUserInfo failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Server error',
