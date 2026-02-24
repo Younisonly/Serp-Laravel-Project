@@ -10,6 +10,7 @@ class User extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
+    // ✅ ALL fields that can be mass-assigned
     protected $fillable = [
         'name',
         'email',
@@ -17,7 +18,12 @@ class User extends Authenticatable
         'phone',
         'image',
         'status',
-        // removed 'date' — now using created_at
+        'type',
+        // ✅ These columns already exist in DB - just add to $fillable:
+        'country',
+        'city',
+        'gender',
+        'birth_date',
     ];
 
     protected $hidden = [
@@ -29,8 +35,6 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'birth_date' => 'date',
     ];
-
-    // ✅ Remove: public $timestamps = false;
-    // Laravel will now auto-fill created_at and updated_at
 }
