@@ -39,18 +39,15 @@ Route::get('/shop/{id}', [ShopsController::class, 'getShopById']);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
-    Route::get('/me', [AuthController::class, 'me']);
-
-
 });
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
     Route::get('/flutter-user/{id}', [UserController::class, 'flutterUserInfo']);
     Route::post('/updateUserInfo', [updateUserInfo::class, 'update'])->middleware('throttle:60,1');;
     Route::get('/shopByUserId/{id}', [ShopsController::class, 'getShopByUserId']);
     Route::post('/comments', [CommentController::class, 'store']);
-
 });
 
 Route::get('/comments', [CommentController::class,  'index']);
