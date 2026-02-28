@@ -13,9 +13,7 @@ class ShopsController extends Controller
     // ✅ Get shop by owner ID (single source of truth)
     public function getByOwner($id)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
 
         try {
             $shop = Shop::where('owner_id', $id)->first();
@@ -32,9 +30,7 @@ class ShopsController extends Controller
     // ✅ Update shop status (with auth + validation)
     public function updateStatus(Request $r, $id)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
 
 
         try {
@@ -56,9 +52,7 @@ class ShopsController extends Controller
     // ✅ Analytics (with safe counts)
     public function getAnalytics($id)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
         try {
             $shop = Shop::findOrFail($id);
             return response()->json([
@@ -78,9 +72,7 @@ class ShopsController extends Controller
     // ✅ Comments (paginated, with user data)
     public function getComments($id, Request $r)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
         try {
             $limit = min((int)$r->get('limit', 3), 20); // Cap at 20
             $comments = Comment::where('shop_id', $id)
@@ -99,9 +91,7 @@ class ShopsController extends Controller
     // ✅ User insights (extendable)
     public function getInsights($id)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
         try {
             return response()->json([
                 'success' => true,
@@ -120,9 +110,7 @@ class ShopsController extends Controller
     // ✅ Reply to comment (with ownership check)
     public function replyToComment(Request $r, $commentId)
     {
-        if (!auth('sanctum')->check()) {
-            return $this->redirectTo(request());
-        }
+       
         try {
             $parent = Comment::findOrFail($commentId);
             $shop = Shop::findOrFail($r->shop_id);
@@ -154,13 +142,5 @@ class ShopsController extends Controller
 
 
 
-    protected function redirectTo($request)
-    {
-        if (! $request->expectsJson()) {
-            abort(response()->json([
-                'status' => 'error',
-                'message' => 'غير مصرح لك، يجب تسجيل الدخول أولاً'
-            ], 401));
-        }
-    }
+ 
 }
