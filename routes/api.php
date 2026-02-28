@@ -38,7 +38,6 @@ Route::get('/shop/{id}', [ShopsController::class, 'getShopById']);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
-    // ❌ /me is NOT here - it needs Sanctum protection
 });
 
 // ================= PROTECTED ROUTES (auth:sanctum) =================
@@ -72,6 +71,15 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Shop registration
     Route::post('/RegisterShop', [shopRegisteration::class, 'store']);
+
+
+    //shop management functiosn
+    Route::get('/shop/owner/{id}', [ShopsController::class, 'getByOwner']);
+    Route::post('/shop/{id}/status', [ShopsController::class, 'updateStatus']);
+    Route::get('/shop/{id}/analytics', [ShopsController::class, 'getAnalytics']);
+    Route::get('/shop/{id}/comments', [ShopsController::class, 'getComments']);
+    Route::post('/comment/{id}/reply', [CommentController::class, 'reply']);
+    Route::get('/shop/{id}/insights', [ShopsController::class, 'getInsights']);
 });
 
 // ================= MORE PUBLIC ROUTES =================
