@@ -40,15 +40,14 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
-    ],
-
-    // config/auth.php
-'guards' => [
-    'api' => [
+        'api' => [
         'driver' => 'sanctum',
         'provider' => 'users',
     ],
-],
+    ],
+
+    // config/auth.php
+
     /*
     |--------------------------------------------------------------------------
     | User Providers
