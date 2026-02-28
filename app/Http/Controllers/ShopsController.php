@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Shop;
@@ -12,6 +13,10 @@ class ShopsController extends Controller
     // ✅ Get shop by owner ID (single source of truth)
     public function getByOwner($id)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
+
         try {
             $shop = Shop::where('owner_id', $id)->first();
             if (!$shop) {
@@ -27,6 +32,11 @@ class ShopsController extends Controller
     // ✅ Update shop status (with auth + validation)
     public function updateStatus(Request $r, $id)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
+
+
         try {
             $shop = Shop::findOrFail($id);
             if ($shop->owner_id !== auth('sanctum')->id()) {
@@ -39,13 +49,16 @@ class ShopsController extends Controller
             return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             Log::error('Update status failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Server error', 'error_message' => $e->getMessage()], 500);
         }
     }
 
     // ✅ Analytics (with safe counts)
     public function getAnalytics($id)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
         try {
             $shop = Shop::findOrFail($id);
             return response()->json([
@@ -58,13 +71,16 @@ class ShopsController extends Controller
             ], 200);
         } catch (\Exception $e) {
             Log::error('Get analytics failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Server error', 'error_message' => $e->getMessage()], 500);
         }
     }
 
     // ✅ Comments (paginated, with user data)
     public function getComments($id, Request $r)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
         try {
             $limit = min((int)$r->get('limit', 3), 20); // Cap at 20
             $comments = Comment::where('shop_id', $id)
@@ -76,13 +92,16 @@ class ShopsController extends Controller
             return response()->json(['success' => true, 'data' => $comments], 200);
         } catch (\Exception $e) {
             Log::error('Get comments failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Server error', 'error_message' => $e->getMessage()], 500);
         }
     }
 
     // ✅ User insights (extendable)
     public function getInsights($id)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
         try {
             return response()->json([
                 'success' => true,
@@ -94,13 +113,16 @@ class ShopsController extends Controller
             ], 200);
         } catch (\Exception $e) {
             Log::error('Get insights failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Server error', 'error_message' => $e->getMessage()], 500);
         }
     }
 
     // ✅ Reply to comment (with ownership check)
     public function replyToComment(Request $r, $commentId)
     {
+        if (!auth('sanctum')->check()) {
+            return $this->redirectTo(request());
+        }
         try {
             $parent = Comment::findOrFail($commentId);
             $shop = Shop::findOrFail($r->shop_id);
@@ -120,10 +142,25 @@ class ShopsController extends Controller
         } catch (\Exception $e) {
             Log::error('Reply to comment failed: ' . $e->getMessage());
             return response()->json(
-                ['success' => false, 
-                'message' => 'Server error',
-                'error_message' => $e->getMessage()
-                ], 500);
+                [
+                    'success' => false,
+                    'message' => 'Server error',
+                    'error_message' => $e->getMessage()
+                ],
+                500
+            );
+        }
+    }
+
+
+
+    protected function redirectTo($request)
+    {
+        if (! $request->expectsJson()) {
+            abort(response()->json([
+                'status' => 'error',
+                'message' => 'غير مصرح لك، يجب تسجيل الدخول أولاً'
+            ], 401));
         }
     }
 }
