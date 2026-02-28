@@ -1,121 +1,129 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\Shop;
-use App\Models\shops;
-use Illuminate\Http\Request;
 use App\Models\Comment;
 use App\Models\Favorite;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ShopsController extends Controller
 {
-    
-    public function getShopById($id)
+    // ✅ Get shop by owner ID (single source of truth)
+    public function getByOwner($id)
     {
         try {
-            $shop = Shop::find($id);
-    
-            if (!$shop) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Shop not found'
-                ], 404);
-            }
-    
-            /* ---------- convert fields safely ---------- */
-            $fieldsToFormat = ['created_at', 'updated_at', 'deleted_at', 'open_at', 'close_at'];
-    
-            foreach ($fieldsToFormat as $field) {
-                if (isset($shop->$field) && $shop->$field !== null) {
-                    // Only convert to string, no Carbon parsing
-                    $shop->$field = (string) $shop->$field;
-                }
-            }
-    
-            return response()->json([
-                'success' => true,
-                'data'    => $shop
-            ], 200);
-    
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
-            ], 500);
-        }
-    }
-    
-    public function getShopByUserId($id)
-    {
-        try {
-            /* ---------- look for the shop that belongs to the owner ---------- */
             $shop = Shop::where('owner_id', $id)->first();
-    
             if (!$shop) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Shop with this owner id is not found'
-                ], 404);
+                return response()->json(['success' => false, 'message' => 'Shop not found'], 404);
             }
-    
-            // /* ---------- convert fields safely ---------- */
-            // $fieldsToFormat = ['created_at', 'updated_at', 'deleted_at', 'open_at', 'close_at'];
-    
-            // foreach ($fieldsToFormat as $field) {
-            //     if (isset($shop->$field) && $shop->$field !== null) {
-            //         $shop->$field = (string) $shop->$field;
-            //     }
-            // }
-    
-            return response()->json([
-                'success' => true,
-                'data'    => $shop
-            ], 200);
-    
+            return response()->json(['success' => true, 'data' => $shop], 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
-            ], 500);
+            Log::error('Get shop by owner failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
         }
     }
-    
-    
-    
-    // GET /shop/owner/{id}
-public function getByOwner($id) {
-    $shop = Shop::where('owner_id', $id)->first();
-    if (!$shop) return response()->json(['success'=>false,'message'=>'Not found'],404);
-    return response()->json(['success'=>true,'data'=>$shop]);
-}
 
-// POST /shop/{id}/status
-public function updateStatus(Request $r, $id) {
-    $shop = Shop::findOrFail($id);
-    /** @var \App\Models\User $user */
-    if ($shop->owner_id != auth('sanctum')->id()) return response()->json(['success'=>false,'message'=>'Unauthorized'],403);
-    $shop->update(['status' => $r->status]);
-    return response()->json(['success'=>true,'data'=>$shop]);
-}
-
-// GET /shop/{id}/analytics
-public function getAnalytics($id) {
-    $shop = Shop::findOrFail($id);
-    return response()->json(['success'=>true,'data'=>['total_views'=>$shop->views,'total_favorites'=>$shop->followers_number,'total_comments'=>Comment::where('shop_id',$id)->count()]]);
-}
-
-// GET /shop/{id}/comments?limit=3
-public function getComments($id, Request $r) {
-    $comments = Comment::where('shop_id',$id)->whereNull('parent_id')->with('user:id,name')->latest()->limit($r->get('limit',3))->get();
-    return response()->json(['success'=>true,'data'=>$comments]);
-}
-
-// GET /shop/{id}/insights
-public function getInsights($id) {
-    return response()->json(['success'=>true,'data'=>['favorited_count'=>Favorite::where('favorable_type','App\Models\Shop')->where('favorable_id',$id)->count(),'viewed_count'=>0,'profile_visits'=>0]]); // Extend later
-}
-    
+    // ✅ Update shop status (with auth + validation)
+    public function updateStatus(Request $r, $id)
+    {
+        try {
+            $shop = Shop::findOrFail($id);
+            if ($shop->owner_id !== auth('sanctum')->id()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
+            $validated = $r->validate(['status' => 'required|in:open,closed']);
+            $shop->update(['status' => $validated['status']]);
+            return response()->json(['success' => true, 'data' => $shop], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            Log::error('Update status failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+        }
     }
+
+    // ✅ Analytics (with safe counts)
+    public function getAnalytics($id)
+    {
+        try {
+            $shop = Shop::findOrFail($id);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_views' => $shop->views ?? 0,
+                    'total_favorites' => $shop->followers_number ?? 0,
+                    'total_comments' => Comment::where('shop_id', $id)->whereNull('parent_id')->count(),
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Get analytics failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+        }
+    }
+
+    // ✅ Comments (paginated, with user data)
+    public function getComments($id, Request $r)
+    {
+        try {
+            $limit = min((int)$r->get('limit', 3), 20); // Cap at 20
+            $comments = Comment::where('shop_id', $id)
+                ->whereNull('parent_id')
+                ->with('commenter:id,name,image')
+                ->latest()
+                ->limit($limit)
+                ->get();
+            return response()->json(['success' => true, 'data' => $comments], 200);
+        } catch (\Exception $e) {
+            Log::error('Get comments failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+        }
+    }
+
+    // ✅ User insights (extendable)
+    public function getInsights($id)
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'favorited_count' => Favorite::where('favorable_type', 'App\Models\Shop')->where('favorable_id', $id)->count(),
+                    'viewed_count' => 0, // Extend with shop_views table later
+                    'profile_visits' => 0, // Extend with shop_visits table later
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Get insights failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Server error','error_message' => $e->getMessage()], 500);
+        }
+    }
+
+    // ✅ Reply to comment (with ownership check)
+    public function replyToComment(Request $r, $commentId)
+    {
+        try {
+            $parent = Comment::findOrFail($commentId);
+            $shop = Shop::findOrFail($r->shop_id);
+            if ($shop->owner_id !== auth('sanctum')->id()) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
+            $validated = $r->validate(['content' => 'required|string|max:500']);
+            $reply = Comment::create([
+                'parent_id' => $commentId,
+                'shop_id' => $shop->id,
+                'commenter_id' => auth('sanctum')->id(),
+                'content' => $validated['content'],
+            ]);
+            return response()->json(['success' => true, 'data' => $reply->load('commenter:id,name,image')], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            Log::error('Reply to comment failed: ' . $e->getMessage());
+            return response()->json(
+                ['success' => false, 
+                'message' => 'Server error',
+                'error_message' => $e->getMessage()
+                ], 500);
+        }
+    }
+}

@@ -42,6 +42,13 @@ return [
         ],
     ],
 
+    // config/auth.php
+'guards' => [
+    'api' => [
+        'driver' => 'sanctum',
+        'provider' => 'users',
+    ],
+],
     /*
     |--------------------------------------------------------------------------
     | User Providers
