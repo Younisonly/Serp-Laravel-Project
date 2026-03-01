@@ -7,6 +7,7 @@ use App\Models\Comment;
 use App\Models\Favorite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ShopsController extends Controller
 {
@@ -44,16 +45,15 @@ class ShopsController extends Controller
         }
     }
 
-    // ✅ Analytics (fixed: polymorphic comments)
+    // ✅ Analytics (fixed: no parent_id, uses your schema)
     public function getAnalytics($id)
     {
         try {
             $shop = Shop::findOrFail($id);
             
-            // ✅ Count comments using polymorphic fields
+            // ✅ Count comments: your schema has NO parent_id column
             $totalComments = Comment::where('commentable_type', Shop::class)
                 ->where('commented_id', $id)
-                ->whereNull('parent_id')
                 ->count();
                 
             return response()->json([
@@ -70,19 +70,38 @@ class ShopsController extends Controller
         }
     }
 
-    // ✅ Comments (fixed: polymorphic query)
+    // ✅ Comments (fixed: no parent_id, returns embedded replies)
     public function getComments($id, Request $r)
     {
         try {
             $limit = min((int)$r->get('limit', 3), 20);
             
+            // ✅ Your schema: NO parent_id column → remove that filter
             $comments = Comment::where('commentable_type', Shop::class)
                 ->where('commented_id', $id)
-                ->whereNull('parent_id')
                 ->with('commenter:id,name,image')
                 ->latest()
                 ->limit($limit)
-                ->get();
+                ->get()
+                // ✅ Append embedded reply data using your accessor
+                ->map(function ($comment) {
+                    return [
+                        'id' => $comment->id,
+                        'content' => $comment->content,
+                        'created_at' => $comment->created_at,
+                        'commenter' => $comment->commenter ? [
+                            'id' => $comment->commenter->id,
+                            'name' => $comment->commenter->name,
+                            'image' => $comment->commenter->image ?? '',
+                        ] : null,
+                        // ✅ Your embedded reply structure
+                        'reply' => $comment->reply_content ? [
+                            'content' => $comment->reply_content,
+                            'replyer' => $comment->replyer_type ?? 'admin',
+                            'created_at' => $comment->replied_at ?? $comment->updated_at,
+                        ] : null,
+                    ];
+                });
                 
             return response()->json(['success' => true, 'data' => $comments], 200);
         } catch (\Exception $e) {
@@ -113,32 +132,60 @@ class ShopsController extends Controller
         }
     }
 
-    // ✅ Reply to comment (fixed: polymorphic create)
+    // ✅ Reply to comment (fixed: UPDATE existing comment, not CREATE new)
     public function replyToComment(Request $r, $commentId)
     {
         try {
-            $parent = Comment::findOrFail($commentId);
+            // ✅ Get the parent comment
+            $comment = Comment::findOrFail($commentId);
             
-            $validated = $r->validate([
-                'shop_id' => 'required|exists:shops,id',
-                'content' => 'required|string|max:500',
-            ]);
+            // ✅ Verify it belongs to a shop the user owns
+            if ($comment->commentable_type !== Shop::class) {
+                return response()->json(['success' => false, 'message' => 'Invalid comment type'], 400);
+            }
             
-            $shop = Shop::findOrFail($validated['shop_id']);
+            $shop = Shop::findOrFail($comment->commented_id);
             
+            // ✅ Check ownership
             if ($shop->owner_id !== auth('sanctum')->id()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
             }
             
-            $reply = Comment::create([
-                'parent_id' => $commentId,
-                'commentable_type' => Shop::class,
-                'commented_id' => $shop->id,
-                'commenter_id' => auth('sanctum')->id(),
-                'content' => $validated['content'],
+            // ✅ Validate reply content
+            $validated = $r->validate([
+                'content' => 'required|string|max:500',
             ]);
             
-            return response()->json(['success' => true, 'data' => $reply->load('commenter:id,name,image')], 201);
+            // ✅ UPDATE the comment with embedded reply (your schema)
+            $comment->update([
+                'reply_content' => $validated['content'],
+                'replyer_type' => 'shop_owner', // or 'admin'
+                'replied_at' => now(),
+            ]);
+            
+            // ✅ Reload with commenter data
+            $comment->load('commenter:id,name,image');
+            
+            // ✅ Return structured response matching your accessor
+            return response()->json([
+                'success' => true, 
+                'data' => [
+                    'id' => $comment->id,
+                    'content' => $comment->content,
+                    'created_at' => $comment->created_at,
+                    'commenter' => $comment->commenter ? [
+                        'id' => $comment->commenter->id,
+                        'name' => $comment->commenter->name,
+                        'image' => $comment->commenter->image ?? '',
+                    ] : null,
+                    'reply' => [
+                        'content' => $comment->reply_content,
+                        'replyer' => $comment->replyer_type,
+                        'created_at' => $comment->replied_at,
+                    ],
+                ]
+            ], 200);
+            
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
