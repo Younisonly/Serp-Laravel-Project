@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Country;
+use Illuminate\Support\Facades\Log;
 
 class CountriesController extends Controller
 {
@@ -17,10 +18,14 @@ class CountriesController extends Controller
                 'data' => $countries
             ]);
         } catch (\Throwable $e) {
+            Log::error('[CountriesController] index failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Something went wrong while fetching countries',
-                'error_message' => $e->getMessage(),
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }
@@ -37,10 +42,14 @@ class CountriesController extends Controller
                 'data' => $countries
             ]);
         } catch (\Throwable $e) {
+            Log::error('[CountriesController] withCities failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Something went wrong while fetching countries with cities',
-                'error_message' => $e->getMessage(),
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }

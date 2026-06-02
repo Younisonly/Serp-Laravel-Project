@@ -20,7 +20,13 @@ class Report extends Model
     use HasFactory;
 
     protected $table = 'reports';
-    protected $guarded = [];
+    protected $fillable = [
+        'reporter_id',
+        'reported_id',
+        'report_table',
+        'content',
+        'status',
+    ];
 
     // The user who reported
     public function reporter()

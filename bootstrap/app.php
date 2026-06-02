@@ -9,23 +9,36 @@ use Illuminate\Http\Request;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
-        api: __DIR__.'/../routes/api.php', // ✅ ADD THIS LINE - registers your API routes
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(append: [
             \App\Http\Middleware\EnsureJsonResponse::class,
+            \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\SanitizeInput::class,
         ]);
+
+        $middleware->alias([
+            'security.headers' => \App\Http\Middleware\SecurityHeaders::class,
+            'sanitize.input' => \App\Http\Middleware\SanitizeInput::class,
+        ]);
+
+        $middleware->redirectGuestsTo(function (\Illuminate\Http\Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return null;
+            }
+            return '/';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // ✅ Handle Sanctum auth failures → return JSON 401
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*')) {
-                response()->json([
+                return response()->json([
                     'success' => false,
                     'message' => 'Unauthenticated.'
-                ], 401)->send();
+                ], 401);
             }
         });
     })->create();

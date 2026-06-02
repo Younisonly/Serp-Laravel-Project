@@ -4,86 +4,153 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
-    // GET all users
     public function index()
     {
-        return response()->json(User::all());
+        try {
+            $users = User::select('id', 'name', 'email', 'image', 'type', 'status')->paginate(20);
+            return response()->json([
+                'success' => true,
+                'data' => $users->items(),
+                'meta' => [
+                    'current_page' => $users->currentPage(),
+                    'last_page' => $users->lastPage(),
+                    'total' => $users->total(),
+                    'per_page' => $users->perPage(),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('UserController index failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
+        }
     }
 
-    // POST new user
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|string|min:6',
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|unique:users',
+                'password' => 'required|string|min:8|max:128',
+            ]);
 
-        $user = User::create($validated);
-        return response()->json($user, 201);
+            $validated['password'] = Hash::make($validated['password']);
+            $user = User::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'data' => $user->only(['id', 'name', 'email', 'type', 'status']),
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Throwable $e) {
+            Log::error('UserController store failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
+        }
     }
 
-    // GET single user
     public function show(User $user)
     {
-        return response()->json($user);
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $user->only(['id', 'name', 'email', 'image', 'type', 'status']),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('UserController show failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
+        }
     }
 
-    // UPDATE user
     public function update(Request $request, User $user)
     {
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,'.$user->id,
-            'password' => 'sometimes|string|min:6',
-        ]);
+        try {
+            if ((int) $request->user()?->id !== (int) $user->id) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
 
-        $user->update($validated);
-        return response()->json($user);
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255',
+                'email' => 'sometimes|email|unique:users,email,'.$user->id,
+                'password' => 'sometimes|string|min:8|max:128',
+            ]);
+
+            if (isset($validated['password'])) {
+                $validated['password'] = Hash::make($validated['password']);
+            }
+
+            $user->update($validated);
+            $user->refresh();
+
+            return response()->json([
+                'success' => true,
+                'data' => $user->only(['id', 'name', 'email', 'image', 'type', 'status']),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\Throwable $e) {
+            Log::error('UserController update failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
+        }
     }
 
-    // DELETE user
-    public function destroy(User $user)
+    public function destroy(Request $request, User $user)
     {
-        $user->delete();
-        return response()->json(null, 204);
-    }
+        try {
+            if ((int) $request->user()?->id !== (int) $user->id) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
 
+            $user->delete();
+            return response()->json(null, 204);
+        } catch (\Throwable $e) {
+            Log::error('UserController destroy failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Server error'], 500);
+        }
+    }
 
     public function flutterUserInfo(Request $request, $id)
     {
         try {
+            $authenticatedUserId = $request->user()?->id;
+            if ((int) $authenticatedUserId !== (int) $id) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Unauthorized',
+                ], 403);
+            }
+
             $user = User::find($id);
-    
+
             if (!$user) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'User not found',
                 ], 404);
             }
-    
-            // Return only the selected fields
+
             $data = $user->only([
                 'id', 'name', 'email', 'phone', 'country', 'city',
                 'gender', 'birth_date', 'image', 'type'
             ]);
-    
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'User retrieved successfully',
                 'data' => $data,
             ], 200);
-    
+
         } catch (\Throwable $e) {
+            Log::error('UserController flutterUserInfo failed', ['user_id' => $id, 'error' => $e->getMessage()]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Server error',
-                'error' => $e->getMessage(),
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }
-    
 }

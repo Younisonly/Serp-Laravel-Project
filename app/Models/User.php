@@ -19,7 +19,6 @@ class User extends Authenticatable
         'image',
         'status',
         'type',
-        // ✅ These columns already exist in DB - just add to $fillable:
         'country',
         'city',
         'gender',
@@ -35,6 +34,6 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'birth_date' => 'date',
+        'birth_date' => 'date:Y-m-d',
     ];
 }

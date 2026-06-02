@@ -18,7 +18,11 @@ class CommentReaction extends Model
     use HasFactory;
 
     protected $table = 'comment_reactions';
-    protected $guarded = [];
+    protected $fillable = [
+        'comment_id',
+        'liker_id',
+        'value',
+    ];
 
     // The comment being reacted to
     public function comment()

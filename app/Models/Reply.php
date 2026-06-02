@@ -18,7 +18,11 @@ class Reply extends Model
     use HasFactory;
 
     protected $table = 'replies';
-    protected $guarded = [];
+    protected $fillable = [
+        'report_id',
+        'content',
+        'status',
+    ];
 
     // The report this reply belongs to
     public function report()

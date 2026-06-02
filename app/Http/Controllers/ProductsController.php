@@ -22,78 +22,78 @@ class ProductsController extends Controller
                 ], 400);
             }
 
+            $products = Product::with(['shop:id,name,logo', 'primaryImage'])
+                ->where('shop_id', $shop_id)
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage, ['*'], 'page', $page);
 
-            $products = Product::select(
-                'products.id',
-                'products.name',
-                'products.price',
-                'products.created_at',
-                'images.url as primary_image',
-                'discount'
-            )
-            ->leftJoin('images', function ($join) {
-                $join->on('images.owner_id', '=', 'products.id')
-                     ->where('images.table', '=', 'products')
-                     ->where('images.is_primary', '=', 1);
-            })
-            ->where('products.shop_id', $shop_id)
-            ->paginate($perPage, ['*'], 'page', $page);
+            $products->getCollection()->transform(function ($product) {
+                $product->primary_image = $product->primaryImage?->url ? asset('storage/' . $product->primaryImage->url) : null;
+                $product->makeHidden(['primaryImage', 'images']);
+                return $product;
+            });
 
             return response()->json([
                 'status' => 'success',
-                'data' => $products
+                'data' => $products->items(),
+                'current_page' => $products->currentPage(),
+                'last_page' => $products->lastPage(),
+                'total' => $products->total(),
             ]);
         } catch (\Throwable $e) {
-            Log::error('ProductsOfShop Error', [
-                'message' => $e->getMessage(),
+            Log::error('[ProductsController] productsOfShop failed: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
             ]);
-    
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Something went wrong while fetching products.',
-                'exception' => get_class($e),
-                'error_message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }
     
-
     public function getProductById($id)
     {
         try {
-            // product + images + category + mini-shop
             $product = Product::with(['primaryImage', 'images', 'category'])
                 ->with(['shop' => function ($q) {
-                    // only the fields you need
                     $q->select('id', 'name', 'address', 'logo');
                 }])
+                ->withCount(['favorites', 'likes'])
                 ->find($id);
-    
+
             if (!$product) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Product not found'
                 ], 404);
             }
-    
+
+            $product->primary_image = $product->primaryImage?->url ? asset('storage/' . $product->primaryImage->url) : null;
+            $product->images_list = $product->images->map(fn($i) => $i->url ? asset('storage/' . $i->url) : null)->filter()->values()->toArray();
+            $product->type = $product->category?->name;
+            $product->likes_count = $product->likes_count ?? 0;
+            $product->favorites_count = $product->favorites_count ?? 0;
+            $product->makeHidden(['primaryImage', 'images', 'category']);
+
             return response()->json([
                 'success' => true,
-                'data'    => $product   // ← product.shop.id / .name / .address / .logo
+                'data'    => $product
             ], 200);
-    
+
         } catch (\Exception $e) {
+            Log::error('[ProductsController] getProductById failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Something went wrong',
-                'error'   => $e->getMessage()
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }
     
-
+    
 }

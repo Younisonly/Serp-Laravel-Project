@@ -2,71 +2,113 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\NotificationTriggered;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreReportRequest;
 use App\Models\Notification;
 use App\Models\Report;
+use App\Models\Product;
+use App\Models\Shop;
+use App\Models\Comment;
+use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    public function store(Request $request)
-    {try{
-        $request->validate([
-            'reported_id' => 'required|integer|exists:comments,id',
-            'content' => 'required|string|max:1000',
-        ]);
+    public function store(StoreReportRequest $request)
+    {
+        try {
+            $validated = $request->validated();
 
-        $report =    Report::create([
-            'reporter_id' => Auth::id(),
-            'reported_id' => $request->reported_id,
-            'report_table' => 'comments',
-            'content' => $request->content,
-            'status' => 'pending',
-        ]);
+            $modelClass = match ($validated['table']) {
+                'products' => Product::class,
+                'shops'    => Shop::class,
+                'comments' => Comment::class,
+            };
 
-        $user = Auth::user(); 
+            $reportedItem = $modelClass::findOrFail($validated['reported_id']);
 
+            $report = Report::create([
+                'reporter_id'  => Auth::id(),
+                'reported_id'  => $validated['reported_id'],
+                'report_table' => $validated['table'],
+                'content'      => strip_tags($validated['content']),
+                'status'       => 'pending',
+            ]);
 
+            if ($validated['table'] === 'comments') {
+                Comment::where('id', $validated['reported_id'])->increment('reports_count');
+            }
 
-// 2.  build the full friendly message
-$fullMessage = <<<EOT
-عزيزي/عزيزتنا {$user->name},
+            // ─── Fire notification events (reporter identity NEVER exposed) ──
+            try {
+                $reporter = Auth::user();
+                $reason = mb_substr(strip_tags($validated['content']), 0, 100);
 
-نود أن نشكرك على إبلاغنا عن هذا الأمر. لقد تم استلام إبلاغك بنجاح، ونحن نقدر مجهودك في مساعدتنا على تحسين خدماتنا والحفاظ على بيئة آمنة للجميع.
+                $action = match ($validated['table']) {
+                    'comments' => 'report_comment',
+                    'shops' => 'report_shop',
+                    'products' => 'report_product',
+                };
 
-فريقنا المختص يقوم حاليًا بمراجعة الإبلاغ الذي قدمته. سنقوم بتحليل المعلومات المقدمة واتخاذ الإجراءات اللازمة بناءً على ذلك. نحرص دائمًا على التعامل بجدية مع جميع الإبلاغات لضمان تحقيق أفضل النتائج.
+                $extra = [
+                    'reason' => $reason,
+                    'report' => $report,
+                ];
 
-سيتم إرسال تحديثات حول حالة الإبلاغ إلى عنوان البريد الإلكتروني المرتبط بحسابك ({$user->email}). يُرجى التأكد من التحقق من صندوق الوارد الخاص بك بانتظام للحصول على أي إشعارات أو تحديثات.
+                match ($validated['table']) {
+                    'comments' => $extra['comment'] = $reportedItem,
+                    'products' => $extra['product'] = $reportedItem,
+                    default => null,
+                };
 
-إذا كانت لديك أي معلومات إضافية أو مستندات تدعم إبلاغك، فلا تتردد في الرد على هذه الرسالة أو التواصل معنا مباشرة. فريق الدعم لدينا سيكون سعيدًا بمساعدتك.
+                if ($validated['table'] === 'comments') {
+                    $comment = $reportedItem;
+                    $shop = Shop::find($comment->commented_id);
+                    if ($shop) $extra['shop'] = $shop;
+                } elseif ($validated['table'] === 'shops') {
+                    $extra['shop'] = $reportedItem;
+                } elseif ($validated['table'] === 'products') {
+                    $extra['product'] = $reportedItem;
+                    $extra['shop'] = Shop::find($reportedItem->shop_id);
+                }
 
-نحن ندرك أهمية إبلاغك، ونسعى جاهدين لتقديم استجابة سريعة وفعالة. يُرجى ملاحظة أن أوقات الاستجابة قد تختلف اعتمادًا على تعقيد القضية المطروحة، ولكننا نضمن لك أننا نعمل بجد لمعالجة الأمر في أقرب وقت ممكن.
+                // Notify the reporter with confirmation
+                try {
+                    $notifService = app(NotificationService::class);
+                    $notifService->deliver($reporter->id, 'your_report_received', [
+                        'user_name' => $reporter->name,
+                    ], [
+                        'sender' => 'system',
+                        'owner_type' => 'user',
+                        'data' => ['report_id' => $report->id],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('Reporter confirmation notification skipped: ' . $e->getMessage());
+                }
 
-شكرًا لصبرك وتفهمك.
+                // Notify the owner (reporter identity stripped inside listener)
+                NotificationTriggered::dispatch($action, $extra);
+            } catch (\Throwable $notifErr) {
+                Log::warning('Report notification event failed (non-critical): ' . $notifErr->getMessage());
+            }
 
-مع خالص التحية،
-فريق الدعم
-EOT;
+            return response()->json([
+                'message' => 'Report submitted successfully.',
+                'report'  => $report,
+            ], 201);
 
-// 3.  insert into custom notifications table
-Notification::create([
-    'owner_id' => auth::id(),
-    'title'    => 'تم استلام إبلاغك',
-    'content'  => $fullMessage,
-    'sender'   => 'system',
-]);
+        } catch (\Throwable $e) {
+            Log::error('Report store failed', ['error' => $e->getMessage()]);
 
-
-        return response()->json([
-            'message' => 'تم إرسال البلاغ بنجاح، وسنقوم بمراجعته.'
-        ], 201);
-    }catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Something went wrong while sending report.',
-            'error_message' => $e->getMessage(),
-        ], 500);
-    }
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Something went wrong. Please try again.',
+            ], 500);
+        }
     }
 }

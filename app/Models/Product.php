@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\ProductCategory;
+use App\Models\Like;
 
 
 class Product extends Model
@@ -17,6 +18,17 @@ class Product extends Model
     protected $fillable = [
         'name',
         'description',
+        'highlights',
+        'specifications',
+        'tags',
+        'brand',
+        'model_number',
+        'color',
+        'size',
+        'material',
+        'weight',
+        'shipping_info',
+        'return_policy',
         'barcode',
         'price',
         'shop_id',
@@ -37,13 +49,17 @@ class Product extends Model
     protected $casts = [
         'warranty' => 'boolean',
         'discount' => 'float',
-        'discount_dates' => 'array', // JSON column
+        'discount_dates' => 'array',
         'warranty_start' => 'date',
         'warranty_end' => 'date',
         'discount_start' => 'date',
         'discount_end' => 'date',
         'stars_rate' => 'float',
         'price' => 'float',
+        'highlights' => 'array',
+        'specifications' => 'array',
+        'tags' => 'array',
+        'weight' => 'float',
     ];
 
     // Relationships
@@ -82,4 +98,8 @@ public function images()
         return $this->morphMany(Favorite::class, 'favorable');
     }
 
+    public function likes(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Like::class, 'likeable');
+    }
 }

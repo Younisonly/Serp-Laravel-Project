@@ -3,19 +3,27 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class NearbyShopController extends Controller
 {
+    private const CACHE_TTL = 60;
+    private const DEFAULT_LIMIT = 50;
+    private const MAX_LIMIT = 200;
+
     public function nearbyShops(Request $request)
     {
         try {
-            $lat = $request->input('lat');
-            $lng = $request->input('lng');
-            $radius = $request->input('radius', 100);
+            $lat = (float) $request->input('lat');
+            $lng = (float) $request->input('lng');
+            $radius = (float) $request->input('radius', 50);
+            $limit = min((int) $request->input('limit', self::DEFAULT_LIMIT), self::MAX_LIMIT);
+            $page = max(1, (int) $request->input('page', 1));
+            $businessType = $request->input('category', '');
+            $openNow = filter_var($request->input('open_now', 'false'), FILTER_VALIDATE_BOOLEAN);
 
-            // Validate required inputs
             if (!$lat || !$lng) {
                 return response()->json([
                     'status' => 'error',
@@ -23,46 +31,68 @@ class NearbyShopController extends Controller
                 ], 400);
             }
 
-            // Optional: cast inputs to float to ensure math safety
-            $lat = (float) $lat;
-            $lng = (float) $lng;
-            $radius = (float) $radius;
+            $gridLat = round($lat, 2);
+            $gridLng = round($lng, 2);
+            $cacheKey = "nearby:{$gridLat}:{$gridLng}:{$radius}:{$limit}:{$page}:{$businessType}:{$openNow}";
 
-            // Query nearby shops
-            $shops = DB::table('shops') // ✅ Correct table name
-                ->whereNotNull('lat')
-                ->whereNotNull('lng')
-                ->select('*', DB::raw("(6371 * ACOS(
-                    COS(RADIANS($lat)) * COS(RADIANS(lat)) * COS(RADIANS(lng) - RADIANS($lng)) + 
-                    SIN(RADIANS($lat)) * SIN(RADIANS(lat))
-                )) AS distance"))
-                ->having('distance', '<', $radius)
-                ->orderBy('distance')
-                ->limit(25)
-                ->get();
+            $result = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($lat, $lng, $radius, $limit, $page, $businessType, $openNow) {
+                $latDelta = $radius / 111.0;
+                $lngDelta = $radius / (111.0 * cos(deg2rad($lat)));
+
+                $minLat = $lat - $latDelta;
+                $maxLat = $lat + $latDelta;
+                $minLng = $lng - $lngDelta;
+                $maxLng = $lng + $lngDelta;
+
+                $haversine = "(6371 * ACOS(
+                    COS(RADIANS(lat)) * COS(RADIANS($lat)) *
+                    COS(RADIANS(lng) - RADIANS($lng)) +
+                    SIN(RADIANS(lat)) * SIN(RADIANS($lat))
+                ))";
+
+                $query = DB::table('shops')
+                    ->select('*', DB::raw("{$haversine} AS distance"))
+                    ->whereNotNull('lat')
+                    ->whereNotNull('lng')
+                    ->whereBetween('lat', [$minLat, $maxLat])
+                    ->whereBetween('lng', [$minLng, $maxLng]);
+
+                if ($businessType !== '') {
+                    $query->where('business_type', $businessType);
+                }
+
+                if ($openNow) {
+                    $query->where('status', 'open');
+                }
+
+                $total = $query->count();
+
+                $shops = $query
+                    ->having('distance', '<', $radius)
+                    ->orderBy('distance')
+                    ->skip(($page - 1) * $limit)
+                    ->take($limit)
+                    ->get();
+
+                return ['data' => $shops, 'total' => $total];
+            });
 
             return response()->json([
                 'status' => 'success',
-                'data' => $shops
+                'data' => $result['data'],
+                'total' => $result['total'] ?? 0,
+                'current_page' => $page,
+                'last_page' => (int) ceil(($result['total'] ?? 0) / $limit),
             ]);
         } catch (\Throwable $e) {
-            // Log the detailed error (optional)
-            Log::error('NearbyShops Error', [
-                'message' => $e->getMessage(),
+            Log::error('[NearbyShopController] nearbyShops failed: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
-            // Return clear error message to API consumer
             return response()->json([
                 'status' => 'error',
-                'message' => 'Something went wrong while fetching nearby shops.',
-                'exception' => get_class($e),
-                'error_message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                // 'trace' => $e->getTraceAsString(), // Uncomment only in development
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }

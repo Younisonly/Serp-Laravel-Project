@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class ProductsFillterController extends Controller
 {
@@ -14,69 +16,101 @@ class ProductsFillterController extends Controller
             $request->validate([
                 'query' => 'nullable|string|max:255',
                 'product_type' => 'nullable|string',
+                'type' => 'nullable|string',
                 'min_price' => 'nullable|numeric|min:0',
                 'max_price' => 'nullable|numeric|min:0',
                 'discount_only' => 'nullable|string|in:true,false,1,0',
-                'order_by' => 'nullable|string|in:most_rated,latest',
+                'discount' => 'nullable|string|in:true,false,1,0',
+                'order_by' => 'nullable|string|in:most_rated,latest,rating,price_low,price_high',
                 'page' => 'nullable|integer|min:1',
                 'limit' => 'nullable|integer|min:1|max:100',
             ]);
 
             $query = $request->input('query', '');
-            $product_type = $request->input('product_type', '');
+            $product_type = $request->input('product_type', $request->input('type', ''));
+            $hasMinPrice = $request->has('min_price');
+            $hasMaxPrice = $request->has('max_price');
             $min_price = $request->input('min_price', 0);
             $max_price = $request->input('max_price', 500000);
             $order_by = $request->input('order_by', '');
             $limit = $request->input('limit', 10);
-            $discount_only = filter_var($request->input('discount_only', false), FILTER_VALIDATE_BOOLEAN);
+            $discountOnly = $request->input('discount_only', $request->input('discount', 'false'));
+            $discount_only = filter_var($discountOnly, FILTER_VALIDATE_BOOLEAN);
 
-            $productsQuery = Product::with(['primaryImage', 'city', 'category']);
+            $page = $request->input('page', 1);
+            $cacheKey = 'pf_' . md5(json_encode($request->except('page'))) . "_p{$page}_l{$limit}";
 
-            if ($query !== '' && $query !== 'all') {
-                $productsQuery->where('name', 'like', "%{$query}%");
-            }
+            $response = Cache::remember($cacheKey, 60, function () use ($query, $product_type, $hasMinPrice, $hasMaxPrice, $min_price, $max_price, $order_by, $limit, $page, $discount_only) {
+                $productsQuery = Product::with(['primaryImage', 'category', 'shop:id,name,logo']);
 
-            
-            if ($product_type !== '') {
-                $productsQuery->whereHas('category', function ($q) use ($product_type) {
-                    $q->where('name', $product_type);
+                if ($query !== '' && $query !== 'all') {
+                    $productsQuery->where('name', 'like', "%{$query}%");
+                }
+
+                if ($product_type !== '') {
+                    $productsQuery->whereHas('category', function ($q) use ($product_type) {
+                        $q->where('name', $product_type);
+                    });
+                }
+
+                if ($discount_only) {
+                    $productsQuery->where('discount', '>', 0);
+                }
+
+                if ($hasMinPrice || $hasMaxPrice) {
+                    $productsQuery->whereBetween('price', [$min_price, $max_price]);
+                }
+
+                if (in_array($order_by, ['most_rated', 'rating'])) {
+                    $productsQuery->orderBy('stars_rate', 'desc');
+                } elseif ($order_by === 'latest') {
+                    $productsQuery->orderBy('created_at', 'desc');
+                } elseif ($order_by === 'price_low') {
+                    $productsQuery->orderBy('price', 'asc');
+                } elseif ($order_by === 'price_high') {
+                    $productsQuery->orderBy('price', 'desc');
+                }
+
+                $total = $productsQuery->count();
+                $models = $productsQuery->skip(($page - 1) * $limit)->take($limit)->get();
+
+                $items = $models->map(function ($product) {
+                    return [
+                        'id' => $product->id,
+                        'name' => $product->name,
+                        'price' => $product->price,
+                        'stars_rate' => $product->stars_rate,
+                        'discount' => $product->discount,
+                        'shopID' => $product->shop_id,
+                        'type' => $product->category?->name ?? '',
+                        'image_url' => $product->primaryImage?->url ? asset('storage/' . $product->primaryImage->url) : '',
+                        'shop' => $product->shop ? [
+                            'name' => $product->shop->name,
+                            'logo' => $product->shop->logo,
+                        ] : null,
+                    ];
                 });
-            }
 
-            if ($discount_only) {
-                $productsQuery->where('discount','>',0 );
-            }
-
-            $productsQuery->whereBetween('price', [$min_price, $max_price]);
-
-            if ($order_by === 'most_rated') {
-                $productsQuery->orderBy('stars_rate', 'desc');
-            } elseif ($order_by === 'latest') {
-                $productsQuery->orderBy('created_at', 'desc');
-            }
-
-            $products = $productsQuery->paginate($limit);
-
-            $products->getCollection()->transform(function ($product) {
                 return [
-                    'id' => $product->id,
-                    'name' => $product->name,
-                    'price' => $product->price,
-                    'stars_rate' => $product->stars_rate,
-                    'discount' => $product->discount,
-                    'shopID' => $product->shop_id,
-                    'type' => $product->category->name ?? '',
-                    'image_url' => $product->primaryImage?->url ?? '',
+                    'items' => $items,
+                    'total' => $total,
+                    'per_page' => $limit,
+                    'current_page' => $page,
+                    'last_page' => (int) ceil($total / $limit),
                 ];
             });
 
-            return response()->json($products);
+            return response()->json($response);
 
         } catch (\Throwable $e) {
+            Log::error('[ProductsFilterController] Productfilter failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Something went wrong',
-                'error_message' => $e->getMessage(),
+                'message' => 'Something went wrong. Please try again.',
             ], 500);
         }
     }

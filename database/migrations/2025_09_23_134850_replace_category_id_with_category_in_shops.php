@@ -9,8 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('shops', function (Blueprint $table) {
-            // 1. remove old FK and column
-            $table->dropForeign(['category_id']); // Laravel names it automatically
+            // 1. remove old column (no FK constraint existed on this column)
             $table->dropColumn('category_id');
 
             // 2. add new flag: 0 = product, 1 = service (or whatever you decide)
@@ -25,7 +24,6 @@ return new class extends Migration
 
             // bring back the old set-up (in case you ever roll back)
             $table->unsignedBigInteger('category_id')->nullable();
-            $table->foreign('category_id')->references('id')->on('shop_categories')->onDelete('set null');
         });
     }
 };
