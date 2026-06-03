@@ -8,6 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('notifications')) {
+            return;
+        }
         Schema::table('notifications', function (Blueprint $table) {
             if (!Schema::hasColumn('notifications', 'owner_type')) {
                 $table->string('owner_type')->default('user')->after('owner_id');
@@ -17,6 +20,9 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (!Schema::hasTable('notifications')) {
+            return;
+        }
         Schema::table('notifications', function (Blueprint $table) {
             $table->dropColumn('owner_type');
         });

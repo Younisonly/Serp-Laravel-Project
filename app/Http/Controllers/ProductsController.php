@@ -22,7 +22,7 @@ class ProductsController extends Controller
                 ], 400);
             }
 
-            $products = Product::with(['shop:id,name,logo', 'primaryImage'])
+            $products = Product::with(['shop:id,name,logo', 'primaryImage', 'category'])
                 ->where('shop_id', $shop_id)
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage, ['*'], 'page', $page);
@@ -75,7 +75,7 @@ class ProductsController extends Controller
             $product->type = $product->category?->name;
             $product->likes_count = $product->likes_count ?? 0;
             $product->favorites_count = $product->favorites_count ?? 0;
-            $product->makeHidden(['primaryImage', 'images', 'category']);
+            $product->makeHidden(['primaryImage', 'images']);
 
             return response()->json([
                 'success' => true,

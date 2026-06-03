@@ -13,10 +13,15 @@ return new class extends Migration
     {
         Schema::create('notifications', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('owner_id'); // user who receives the notification
+            $table->unsignedBigInteger('owner_id');
+            $table->string('owner_type')->default('user');
             $table->string('title');
             $table->text('content');
-            $table->string('sender'); // 'system', 'user_123', etc.
+            $table->string('sender');
+            $table->string('type')->default('system');
+            $table->string('action_type')->nullable();
+            $table->json('data')->nullable();
+            $table->boolean('is_read')->default(false);
             $table->timestamps();
         });
     }

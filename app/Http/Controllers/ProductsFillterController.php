@@ -84,6 +84,13 @@ class ProductsFillterController extends Controller
                         'shopID' => $product->shop_id,
                         'type' => $product->category?->name ?? '',
                         'image_url' => $product->primaryImage?->url ? asset('storage/' . $product->primaryImage->url) : '',
+                        'category' => $product->category ? [
+                            'id' => $product->category->id,
+                            'name' => $product->category->name,
+                            'name_en' => $product->category->name_en ?? $product->category->name,
+                            'name_ar' => $product->category->name_ar ?? $product->category->name,
+                            'icon' => $product->category->icon,
+                        ] : null,
                         'shop' => $product->shop ? [
                             'name' => $product->shop->name,
                             'logo' => $product->shop->logo,

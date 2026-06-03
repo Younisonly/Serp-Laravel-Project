@@ -8,6 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('notifications')) {
+            return;
+        }
         Schema::table('notifications', function (Blueprint $table) {
             if (!Schema::hasColumn('notifications', 'type')) {
                 $table->string('type')->default('system')->after('sender');
@@ -26,6 +29,9 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (!Schema::hasTable('notifications')) {
+            return;
+        }
         Schema::table('notifications', function (Blueprint $table) {
             $table->dropColumn(['type', 'action_type', 'data', 'is_read']);
         });

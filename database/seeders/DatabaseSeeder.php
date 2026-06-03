@@ -286,7 +286,8 @@ class DatabaseSeeder extends Seeder
                 13 => 'Automotive', 14 => 'Jewelry & Accessories',
             ];
 
-            $typeName = $shopCategories[$s['type'] - 1]['name'];
+            $shopCategories = ['Restaurant', 'Cafe', 'Supermarket', 'Electronics', 'Clothing', 'Pharmacy', 'Beauty', 'Bakery', 'Furniture', 'Bookstore', 'Flower Shop', 'Gym', 'Car Repair', 'Jewelry'];
+            $typeName = $shopCategories[$s['type'] - 1] ?? 'Supermarket';
             $productList = $productNames[$typeName] ?? $productNames['Supermarket'];
             $categoryName = $categoryMap[$s['type']] ?? 'General';
             $productCat = ProductCategory::where('name', $categoryName)->first();
@@ -461,11 +462,20 @@ class DatabaseSeeder extends Seeder
 
         $this->call(ProductSeeder::class);
 
+        $this->call(BusinessTypesAndAmenitiesSeeder::class);
+
         $this->call(NotificationFormSeeder::class);
 
         $this->call(VerificationPlansSeeder::class);
 
         $this->call(NotificationTemplateSeeder::class);
+
+        $this->call(TestDataSeeder::class);
+
+        // Clear cached business types and amenities
+        try {
+            \Illuminate\Support\Facades\Cache::forget('business_types_active');
+        } catch (\Throwable $e) {}
 
         echo "\n✅ Seeding complete!\n";
         echo "   Countries: " . Country::count() . "\n";

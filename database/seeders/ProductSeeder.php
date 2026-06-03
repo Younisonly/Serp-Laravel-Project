@@ -98,7 +98,8 @@ class ProductSeeder extends Seeder
         }
 
         if (empty($product->model_number)) {
-            $prefix = $product->name ? strtoupper(substr($product->name, 0, 3)) : 'PRD';
+            $prefix = $product->name ? strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $product->name)) : 'PRD';
+            $prefix = mb_substr($prefix, 0, 3) ?: 'PRD';
             $data['model_number'] = $prefix . '-' . ($product->shop_id ?? 0) . '-' . str_pad((string) $product->id, 3, '0', STR_PAD_LEFT);
         }
 
