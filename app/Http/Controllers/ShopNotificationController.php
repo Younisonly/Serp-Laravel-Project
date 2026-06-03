@@ -159,10 +159,19 @@ class ShopNotificationController extends Controller
 
     public static function format($n): array
     {
+        $titleI18n = $n->data['title_i18n'] ?? null;
+        $contentI18n = $n->data['content_i18n'] ?? null;
+        $templateKey = $n->data['template_key'] ?? null;
+        $templateVariables = $n->data['vars'] ?? null;
+
         return [
             'id' => $n->id,
             'title' => $n->title,
             'content' => $n->content,
+            'title_i18n' => $titleI18n,
+            'content_i18n' => $contentI18n,
+            'template_key' => $templateKey,
+            'template_variables' => $templateVariables,
             'sender' => $n->sender,
             'type' => $n->type ?? 'system',
             'action_type' => $n->action_type,
