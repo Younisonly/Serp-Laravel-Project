@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Notification;
 use App\Models\NotificationForm;
+use App\Models\NotificationTemplate;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -26,11 +27,31 @@ class NotificationService
 
     // ─── RENDERING ────────────────────────────────────────────────────────
 
-    public function render(string $templateKey, array $variables = []): ?array
+    public function render(string $templateKey, array $variables = [], string $locale = 'en'): ?array
     {
+        // For Arabic, try NotificationTemplate (bilingual) first
+        if ($locale === 'ar') {
+            $tpl = NotificationTemplate::active()->where('key', $templateKey)->first();
+            if ($tpl) {
+                $title = $this->safeReplace($tpl->title_ar ?: $tpl->title_en, $variables);
+                $body = $this->safeReplace($tpl->content_ar ?: $tpl->content_en, $variables);
+                $form = $this->getTemplate($templateKey);
+                return [
+                    'title' => $title,
+                    'body' => $body,
+                    'type' => $form?->key ?? $templateKey,
+                    'action_type' => $form?->action_type ?? null,
+                    'category' => $form?->category ?? 'system',
+                    'icon' => $form?->icon ?? null,
+                    'priority' => $form?->priority ?? 'normal',
+                    'owner_type' => $form?->owner_type ?? 'user',
+                ];
+            }
+        }
+
         $form = $this->getTemplate($templateKey);
         if (!$form) {
-            Log::warning("Notification template not found: {$templateKey}");
+            Log::warning("Notification template not found: {$templateKey} (locale: {$locale})");
             return null;
         }
 
@@ -94,6 +115,17 @@ class NotificationService
         if (!empty($variables)) {
             $data['vars'] = $this->sanitizeVariables($variables);
         }
+        $data['template_key'] = $templateKey;
+
+        $arRendered = $this->render($templateKey, $variables, 'ar');
+        $data['title_i18n'] = [
+            'en' => $rendered['title'],
+            'ar' => $arRendered ? ($arRendered['title'] ?? $rendered['title']) : $rendered['title'],
+        ];
+        $data['content_i18n'] = [
+            'en' => $rendered['body'],
+            'ar' => $arRendered ? ($arRendered['body'] ?? $rendered['body']) : $rendered['body'],
+        ];
 
         $navigation = $this->resolveNavigation($templateKey, $data, $variables);
         $deepLink = $navigation['deep_link'] ?? null;
